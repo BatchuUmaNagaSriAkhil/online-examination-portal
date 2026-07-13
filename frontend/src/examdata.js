@@ -1,4 +1,8 @@
 // --- 📄 STATIC COMPREHENSIVE EXAM DATA PLATFORM ---
+// NOTE: kept for reference/offline demo purposes only. The live "Take Exam"
+// flow (main.jsx -> take-exam.jsx) now always fetches real exam data from
+// the backend by ID, so exams created in the Admin panel actually show up
+// for students. This file is no longer imported by the exam-taking flow.
 export const staticExams = [
   {
     _id: "6a50702a75524552a17ce5c1", // Hardcoded Token ID
