@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client';
 import IndexPortal from '../index.jsx'; 
 import AdminPanel from '../admin.jsx'; 
 import StudentDashboard from '../student-dashboard.jsx'; 
-import { staticExams } from './examsData'; 
 
 const TakeExamRoom = ({ examId, navigateTo }) => {
   const [exam, setExam] = useState(null);
@@ -33,25 +32,28 @@ const TakeExamRoom = ({ examId, navigateTo }) => {
           if (!attemptCheck.allowed) {
             alert(attemptCheck.error);
             navigateTo('/dashboard');
+            setLoading(false);
             return;
           }
-          
-          const localMatch = staticExams.find(item => item._id === examId);
-          if (localMatch) {
-            const now = new Date();
-            const end = new Date(localMatch.endDate);
 
-            if (localMatch.endDate && now > end) {
-              alert("❌ This exam session has already reached its closing time limit.");
-              navigateTo('/dashboard');
-              return;
-            }
-            setExam(localMatch);
-          }
-          setLoading(false);
+          return fetch(`http://localhost:5000/api/student/exams/${examId}`)
+            .then(res => {
+              if (!res.ok) throw new Error("Exam not found on server.");
+              return res.json();
+            })
+            .then(examData => {
+              if (examData.endDate && new Date() > new Date(examData.endDate)) {
+                alert("❌ This exam session has already reached its closing time limit.");
+                navigateTo('/dashboard');
+                setLoading(false);
+                return;
+              }
+              setExam(examData);
+              setLoading(false);
+            });
         })
         .catch((err) => {
-          console.error("Failed to check exam attempt eligibility:", err);
+          console.error("Failed to load exam:", err);
           alert("⚠️ Network Sync Error: Could not connect to API routes safely.");
           setLoading(false);
         });
@@ -81,7 +83,7 @@ const TakeExamRoom = ({ examId, navigateTo }) => {
     }, 1000);
 
     return () => clearInterval(timerInterval);
-  }, [exam, isForceSubmitting, selectedAnswers]);
+  }, [exam, isForceSubmitting]);
 
   const handleAutoForceSubmit = () => {
     setIsForceSubmitting(true);
@@ -97,10 +99,6 @@ const TakeExamRoom = ({ examId, navigateTo }) => {
 
   const executeSubmissionPayload = async () => {
     if (!exam || !exam.questions) return;
-    let correctCount = 0;
-    exam.questions.forEach((q, idx) => {
-      if (selectedAnswers[idx] === q.correct) correctCount++;
-    });
 
     try {
       const res = await fetch('http://localhost:5000/api/student/submit-exam', {
@@ -110,19 +108,21 @@ const TakeExamRoom = ({ examId, navigateTo }) => {
           email: studentEmail, 
           examId: exam._id, 
           examTitle: exam.title, 
-          score: `${correctCount}/${exam.questions.length}`,
-          studentAnswers: selectedAnswers,
-          questionsSnapshot: exam.questions
+          studentAnswers: selectedAnswers
         })
       });
 
-      if (!res.ok) throw new Error("Submission network failure.");
+      if (!res.ok) {
+        // Read precise rejection explanation directly from the response body
+        const rawBody = await res.text().catch(() => "No descriptive payload given");
+        throw new Error(`Server status ${res.status} - Details: ${rawBody}`);
+      }
 
       alert(`🏁 Exam Submitted Successfully!`);
       navigateTo('/dashboard');
     } catch (err) {
-      console.error(err);
-      alert("Error logging exam metrics.");
+      console.error("Submission Failure Details:", err);
+      alert(`Error logging exam metrics: ${err.message}`);
     }
   };
 
@@ -144,19 +144,34 @@ const TakeExamRoom = ({ examId, navigateTo }) => {
         </div>
         <hr style={styles.divider} />
         <div>
-          <p style={{ fontWeight: 'bold', color: '#1f2937' }}>{currentIdx + 1}. {exam.questions[currentIdx].text}</p>
-          <div style={styles.optionsList}>
-            {['A', 'B', 'C', 'D'].map((opt) => {
-              const optionText = exam.questions[currentIdx][`option${opt}`];
-              if (!optionText) return null;
-              return (
-                <label key={opt} style={{ ...styles.optionItem, backgroundColor: selectedAnswers[currentIdx] === opt ? '#eff6ff' : '#fff', border: selectedAnswers[currentIdx] === opt ? '2px solid #2563eb' : '1px solid #d1d5db' }}>
-                  <input type="radio" checked={selectedAnswers[currentIdx] === opt} onChange={() => setSelectedAnswers({ ...selectedAnswers, [currentIdx]: opt })} style={{ marginRight: '10px' }} />
-                  <strong>{opt}.</strong> {optionText}
-                </label>
-              );
-            })}
-          </div>
+          {exam.questions[currentIdx].type === 'coding' ? (
+            <div>
+              <p style={{ fontWeight: 'bold', color: '#1f2937' }}>{currentIdx + 1}. {exam.questions[currentIdx].codingProblemStatement}</p>
+              <textarea
+                value={selectedAnswers[currentIdx]?.code || ''}
+                onChange={(e) => setSelectedAnswers({ ...selectedAnswers, [currentIdx]: { code: e.target.value } })}
+                placeholder="// Write your code here..."
+                style={styles.codeTextarea}
+                spellCheck="false"
+              />
+            </div>
+          ) : (
+            <div>
+              <p style={{ fontWeight: 'bold', color: '#1f2937' }}>{currentIdx + 1}. {exam.questions[currentIdx].questionText}</p>
+              <div style={styles.optionsList}>
+                {(exam.questions[currentIdx].options || []).map((optionText, oIdx) => {
+                  const opt = String.fromCharCode(65 + oIdx); // A, B, C, D
+                  if (!optionText) return null;
+                  return (
+                    <label key={opt} style={{ ...styles.optionItem, backgroundColor: selectedAnswers[currentIdx] === opt ? '#eff6ff' : '#fff', border: selectedAnswers[currentIdx] === opt ? '2px solid #2563eb' : '1px solid #d1d5db' }}>
+                      <input type="radio" checked={selectedAnswers[currentIdx] === opt} onChange={() => setSelectedAnswers({ ...selectedAnswers, [currentIdx]: opt })} style={{ marginRight: '10px' }} />
+                      <strong>{opt}.</strong> {optionText}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
         <div style={styles.actionRow}>
           <button disabled={currentIdx === 0} onClick={() => setCurrentIdx(currentIdx - 1)} style={{ ...styles.navBtn, opacity: currentIdx === 0 ? 0.4 : 1 }}>◀ Back</button>
@@ -207,6 +222,7 @@ const styles = {
   divider: { border: '0', height: '1px', backgroundColor: '#e5e7eb', margin: '20px 0' },
   optionsList: { display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '15px' },
   optionItem: { display: 'flex', alignItems: 'center', padding: '12px', borderRadius: '6px', cursor: 'pointer' },
+  codeTextarea: { width: '100%', minHeight: '220px', marginTop: '15px', backgroundColor: '#0f172a', color: '#38bdf8', border: 'none', borderRadius: '8px', padding: '16px', fontSize: '14px', fontFamily: 'monospace', outline: 'none', resize: 'vertical', boxSizing: 'border-box' },
   actionRow: { display: 'flex', justifyContent: 'space-between', marginTop: '20px', borderTop: '1px solid #e5e7eb', paddingTop: '15px' },
   navBtn: { backgroundColor: '#4b5563', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', cursor: 'pointer' },
   submitBtn: { backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },
