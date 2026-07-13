@@ -62,7 +62,12 @@ useEffect(() => {
         // Refresh dashboard statistics counters
         const res = await fetch('http://localhost:5000/api/admin/dashboard');
         const data = await res.json();
-        setStats(data.stats);
+        setStats(
+          data?.stats || {
+            examsConducted: 0,
+            registeredStudents: 0,
+          }
+        );
       }
     } catch (err) { 
       alert("Error launching exam."); 
