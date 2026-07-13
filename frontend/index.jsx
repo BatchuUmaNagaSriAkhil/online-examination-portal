@@ -45,12 +45,13 @@ const IndexPortal = ({ navigateTo }) => {
     }
 
     try {
-      localStorage.setItem('userEmail', email);
-      localStorage.setItem('userRole', type);
-
       if (type === 'admin') {
+        localStorage.setItem('userEmail', email);
+        localStorage.setItem('userRole', type);
         navigateTo('/admin');
       } else {
+        localStorage.setItem('userEmail', email);
+        localStorage.setItem('userRole', type);
         navigateTo('/dashboard');
       }
     } catch (err) {
