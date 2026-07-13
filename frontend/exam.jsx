@@ -11,10 +11,14 @@ const ExamEnvironment = () => {
   ];
 
   useEffect(() => {
-    if (timeLeft <= 0) return;
-    const timer = setInterval(() => setTimeLeft(timeLeft - 1), 1000);
-    return () => clearInterval(timer);
-  }, [timeLeft]);
+  if (timeLeft <= 0) return;
+
+  const timer = setTimeout(() => {
+    setTimeLeft((prev) => prev - 1);
+  }, 1000);
+
+  return () => clearTimeout(timer);
+}, [timeLeft]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -23,8 +27,11 @@ const ExamEnvironment = () => {
   };
 
   const handleOptionSelect = (option) => {
-    setAnswers({ ...answers, [currentQuestion]: option });
-  };
+  setAnswers((prev) => ({
+    ...prev,
+    [currentQuestion]: option,
+  }));
+};
 
   const handleSubmitExam = () => {
     console.log("Submitting answers to backend:", answers);
